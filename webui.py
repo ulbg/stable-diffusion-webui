@@ -660,6 +660,7 @@ def cancel_process():
 
 def is_cancel_generation_requested():
     global process_image_cancel_requested
+    return process_image_cancel_requested
 
 def process_images(
         outpath, func_init, func_sample, prompt, seed, sampler_name, skip_grid, skip_save, batch_size,
@@ -1907,8 +1908,7 @@ class ServerLauncher(threading.Thread):
             'server_name': '0.0.0.0', 
             'share': opt.share
         }
-        if not opt.share:
-            demo.queue(concurrency_count=1)
+
         if opt.share and opt.share_password:
             gradio_params['auth'] = ('webui', opt.share_password)    
         self.demo.launch(**gradio_params)
