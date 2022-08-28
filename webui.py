@@ -647,6 +647,19 @@ def oxlamon_matrix(prompt, seed, batch_size):
     all_seeds = len(all_prompts) * [seed]
     return all_seeds, n_iter, prompt_matrix_parts, all_prompts, None
 
+process_image_cancel_requested = False
+process_image_running = False
+
+def is_generation_running():
+    global process_image_running
+    return process_image_running
+
+def cancel_process():
+    global process_image_cancel_requested
+    process_image_cancel_requested = True
+
+def is_cancel_generation_requested():
+    global process_image_cancel_requested
 
 def process_images(
         outpath, func_init, func_sample, prompt, seed, sampler_name, skip_grid, skip_save, batch_size,
@@ -733,6 +746,10 @@ def process_images(
 
         for n in range(n_iter):
             print(f"Iteration: {n+1}/{n_iter}")
+            if is_cancel_generation_requested():
+                print("Stopping generation...")
+                break
+
             prompts = all_prompts[n * batch_size:(n + 1) * batch_size]
             seeds = all_seeds[n * batch_size:(n + 1) * batch_size]
 
@@ -1015,6 +1032,12 @@ def txt2img(prompt: str, ddim_steps: int, sampler_name: str, toggles: List[int],
         return samples_ddim
 
     try:
+        global process_image_cancel_requested
+        process_image_cancel_requested = False
+
+        global process_image_running
+        process_image_running = True
+
         output_images, seed, info, stats = process_images(
             outpath=outpath,
             func_init=init,
@@ -1057,7 +1080,7 @@ def txt2img(prompt: str, ddim_steps: int, sampler_name: str, toggles: List[int],
         stats = err_msg
         return [], seed, 'err', stats
     finally:
-
+        process_image_running = False
         if err:
             crash(err, '!!Runtime error (txt2img)!!')
 
@@ -1214,6 +1237,12 @@ def img2img(prompt: str, image_editor_mode: str, init_info, mask_mode: str, mask
         return samples_ddim
 
     try:
+        global process_image_cancel_requested
+        process_image_cancel_requested = False
+
+        global process_image_running
+        process_image_running = True
+
         if loopback:
             output_images, info = None, None
             history = []
@@ -1335,6 +1364,7 @@ def img2img(prompt: str, image_editor_mode: str, init_info, mask_mode: str, mask
         stats = err_msg
         return [], seed, 'err', stats
     finally:
+        process_image_running = False
         if err:
             crash(err, '!!Runtime error (img2img)!!')
 
@@ -1585,6 +1615,7 @@ styling = """
 [data-testid="image"] {min-height: 512px !important}
 * #body>.col:nth-child(2){width:250%;max-width:89vw}
 #generate{width: 100%; }
+#cancel{width: 100%; }
 #prompt_row input{
  font-size:20px
 }
@@ -1647,6 +1678,7 @@ with gr.Blocks(css=css, analytics_enabled=False, title="Stable Diffusion WebUI")
                     output_txt2img_stats = gr.HTML(label='Stats')
                 with gr.Column():
                     txt2img_btn = gr.Button("Generate", elem_id="generate", variant="primary")
+                    txt2img_cancel = gr.Button("Cancel", full_width=True, elem_id="cancel")
                     txt2img_steps = gr.Slider(minimum=1, maximum=250, step=1, label="Sampling Steps", value=txt2img_defaults['ddim_steps'])
                     txt2img_sampling = gr.Dropdown(label='Sampling method (k_lms is default k-diffusion sampler)', choices=["DDIM", "PLMS", 'k_dpm_2_a', 'k_dpm_2', 'k_euler_a', 'k_euler', 'k_heun', 'k_lms'], value=txt2img_defaults['sampler_name'])
                     with gr.Tabs():
@@ -1678,6 +1710,8 @@ with gr.Blocks(css=css, analytics_enabled=False, title="Stable Diffusion WebUI")
                 [output_txt2img_gallery, output_txt2img_seed, output_txt2img_params, output_txt2img_stats]
             )
 
+            txt2img_cancel.click(cancel_process, [], [])
+
         with gr.TabItem("Stable Diffusion Image-to-Image Unified", id="img2img_tab"):
             with gr.Row(elem_id="prompt_row"):
                 img2img_prompt = gr.Textbox(label="Prompt", 
@@ -1689,6 +1723,7 @@ with gr.Blocks(css=css, analytics_enabled=False, title="Stable Diffusion WebUI")
                 show_label=False).style()
                 img2img_btn_mask = gr.Button("Generate",variant="primary", visible=False, elem_id="img2img_mask_btn")
                 img2img_btn_editor = gr.Button("Generate",variant="primary", elem_id="img2img_editot_btn")
+                img2img_cancel = gr.Button("Cancel", full_width=True, elem_id="cancel")
             with gr.Row().style(equal_height=False):
                 with gr.Column():
                     img2img_image_editor_mode = gr.Radio(choices=["Mask", "Crop"], label="Image Editor Mode", value="Crop")
@@ -1785,6 +1820,8 @@ with gr.Blocks(css=css, analytics_enabled=False, title="Stable Diffusion WebUI")
                     img2img_rb_steps_start, img2img_rb_steps_end, img2img_rb_cfgs_start, img2img_rb_cfgs_end, img2img_rb_denoise_start, img2img_rb_denoise_end],
                 [output_img2img_gallery, output_img2img_seed, output_img2img_params, output_img2img_stats]
             )
+
+            img2img_cancel.click(cancel_process, [], [])
 
             img2img_painterro_btn.click(None, [img2img_image_editor], None, _js="""(img) => {
                 try {
