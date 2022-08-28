@@ -718,6 +718,7 @@ def process_images(
 
     precision_scope = autocast if opt.precision == "autocast" else nullcontext
     output_images = []
+    infos = []
     stats = []
     with torch.no_grad(), precision_scope("cuda"), (model.ema_scope() if not opt.optimized else nullcontext()):
         init_data = func_init()
@@ -865,6 +866,15 @@ normalize_prompt_weights, use_GFPGAN, write_info_files, prompt_matrix, init_img,
 skip_grid, sort_samples, sampler_name, ddim_eta, n_iter, batch_size, i, denoising_strength, resize_mode)
 
                 output_images.append(image)
+                curr_info = f"""
+
+{n}:
+"{prompts[i]}"
+Seed: {seeds[i]}, Steps: {curr_steps}, CFG scale: {format(curr_cfgs, '.3f')}"""
+                
+                if init_img:
+                    curr_info += f", Denoising str: {format(curr_denoise_str, '.3f')}"
+                infos.append(curr_info)
 
         if (prompt_matrix or not skip_grid) and not do_not_save_grid:
             if prompt_matrix:
@@ -900,8 +910,12 @@ skip_grid, sort_samples, sampler_name, ddim_eta, n_iter, batch_size, i, denoisin
     time_diff = time.time()-start_time
 
     info = f"""
-{prompt}
-Steps: {steps}, Sampler: {sampler_name}, CFG scale: {cfg_scale}, Seed: {seed}{', GFPGAN' if use_GFPGAN and GFPGAN is not None else ''}{', '+realesrgan_model_name if use_RealESRGAN and RealESRGAN is not None else ''}{', Prompt Matrix Mode.' if prompt_matrix else ''}""".strip()
+Sampler: {sampler_name}
+{', GFPGAN' if use_GFPGAN and GFPGAN is not None else ''}{', '+realesrgan_model_name if use_RealESRGAN and RealESRGAN is not None else ''}
+{'Prompt Matrix Mode.' if prompt_matrix else ''}"""
+    for img_info in infos:
+        info += img_info
+    info.strip()
     stats = f'''
 Took { round(time_diff, 2) }s total ({ round(time_diff/(len(all_prompts)),2) }s per image)
 Peak memory usage: { -(mem_max_used // -1_048_576) } MiB / { -(mem_total // -1_048_576) } MiB / { round(mem_max_used/mem_total*100, 3) }%'''
